@@ -13,10 +13,17 @@
  */
 package ch.qos.logback.core.rolling;
 
+import ch.qos.logback.core.CoreConstants;
 import ch.qos.logback.core.FileAppender;
 import ch.qos.logback.core.rolling.helper.CompressionMode;
+import ch.qos.logback.core.rolling.helper.Compressor;
 import ch.qos.logback.core.rolling.helper.FileNamePattern;
+import ch.qos.logback.core.rolling.helper.RenameUtil;
 import ch.qos.logback.core.spi.ContextAwareBase;
+
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Implements methods common to most, it not all, rolling policies. Currently
@@ -30,6 +37,8 @@ public abstract class RollingPolicyBase extends ContextAwareBase implements Roll
     FileNamePattern fileNamePattern;
     // fileNamePatternStr is always slashified, see setter
     protected String fileNamePatternStr;
+
+    protected RenameUtil renameUtil = new RenameUtil();
 
     private FileAppender<?> parent;
 
@@ -91,5 +100,26 @@ public abstract class RollingPolicyBase extends ContextAwareBase implements Roll
 
     public String getParentsRawFileProperty() {
         return parent.rawFileProperty();
+    }
+
+    protected abstract Compressor getCompressor();
+
+    protected Future<?> renameRawAndAsyncCompress(String nameOfCompressedFile, String innerEntryName) throws RolloverFailure {
+        String parentsRawFile = getParentsRawFileProperty();
+        String tmpTarget = nameOfCompressedFile + System.nanoTime() + ".tmp";
+        renameUtil.rename(parentsRawFile, tmpTarget);
+        return getCompressor().asyncCompress(tmpTarget, nameOfCompressedFile, innerEntryName);
+    }
+
+    protected void waitForAsynchronousJobToStop(Future<?> aFuture, String jobDescription) {
+        if (aFuture != null) {
+            try {
+                aFuture.get(CoreConstants.SECONDS_TO_WAIT_FOR_COMPRESSION_JOBS, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                addError("Timeout while waiting for " + jobDescription + " job to finish", e);
+            } catch (Exception e) {
+                addError("Unexpected exception while waiting for " + jobDescription + " job to finish", e);
+            }
+        }
     }
 }

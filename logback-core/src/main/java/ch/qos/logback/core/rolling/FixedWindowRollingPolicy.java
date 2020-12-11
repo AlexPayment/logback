@@ -13,13 +13,18 @@
  */
 package ch.qos.logback.core.rolling;
 
-import static ch.qos.logback.core.CoreConstants.CODES_URL;
+import ch.qos.logback.core.CoreConstants;
+import ch.qos.logback.core.rolling.helper.CompressionMode;
+import ch.qos.logback.core.rolling.helper.Compressor;
+import ch.qos.logback.core.rolling.helper.FileFilterUtil;
+import ch.qos.logback.core.rolling.helper.FileNamePattern;
+import ch.qos.logback.core.rolling.helper.IntegerTokenConverter;
 
 import java.io.File;
 import java.util.Date;
+import java.util.concurrent.Future;
 
-import ch.qos.logback.core.CoreConstants;
-import ch.qos.logback.core.rolling.helper.*;
+import static ch.qos.logback.core.CoreConstants.CODES_URL;
 
 /**
  * When rolling over, <code>FixedWindowRollingPolicy</code> renames files
@@ -36,8 +41,8 @@ public class FixedWindowRollingPolicy extends RollingPolicyBase {
     static final String SEE_PARENT_FN_NOT_SET = "Please refer to "+CODES_URL+"#fwrp_parentFileName_not_set";
     int maxIndex;
     int minIndex;
-    RenameUtil util = new RenameUtil();
     Compressor compressor;
+    Future<?> compressionFuture;
 
     public static final String ZIP_ENTRY_DATE_PATTERN = "yyyy-MM-dd_HHmm";
 
@@ -52,7 +57,7 @@ public class FixedWindowRollingPolicy extends RollingPolicyBase {
     }
 
     public void start() {
-        util.setContext(this.context);
+        renameUtil.setContext(this.context);
 
         if (fileNamePatternStr != null) {
             fileNamePattern = new FileNamePattern(fileNamePatternStr, this.context);
@@ -103,6 +108,20 @@ public class FixedWindowRollingPolicy extends RollingPolicyBase {
         super.start();
     }
 
+    @Override
+    public void stop() {
+        if (!isStarted()) {
+            return;
+        }
+        waitForAsynchronousJobToStop(compressionFuture, "compression");
+        super.stop();
+    }
+
+    @Override
+    protected Compressor getCompressor() {
+        return compressor;
+    }
+
     /**
      * Subclasses can override this method to increase the max window size, if required.  This is to
      * address LOGBACK-266.
@@ -137,7 +156,7 @@ public class FixedWindowRollingPolicy extends RollingPolicyBase {
                 File toRename = new File(toRenameStr);
                 // no point in trying to rename an inexistent file
                 if (toRename.exists()) {
-                    util.rename(toRenameStr, fileNamePattern.convertInt(i + 1));
+                    renameUtil.rename(toRenameStr, fileNamePattern.convertInt(i + 1));
                 } else {
                     addInfo("Skipping roll-over for inexistent file " + toRenameStr);
                 }
@@ -146,13 +165,13 @@ public class FixedWindowRollingPolicy extends RollingPolicyBase {
             // move active file name to min
             switch (compressionMode) {
             case NONE:
-                util.rename(getActiveFileName(), fileNamePattern.convertInt(minIndex));
+                renameUtil.rename(getActiveFileName(), fileNamePattern.convertInt(minIndex));
                 break;
             case GZ:
-                compressor.compress(getActiveFileName(), fileNamePattern.convertInt(minIndex), null);
+                compressionFuture = renameRawAndAsyncCompress(fileNamePattern.convertInt(minIndex), null);
                 break;
             case ZIP:
-                compressor.compress(getActiveFileName(), fileNamePattern.convertInt(minIndex), zipEntryFileNamePattern.convert(new Date()));
+                compressionFuture = renameRawAndAsyncCompress(fileNamePattern.convertInt(minIndex), zipEntryFileNamePattern.convert(new Date()));
                 break;
             }
         }

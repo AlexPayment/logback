@@ -13,23 +13,20 @@
  */
 package ch.qos.logback.core.rolling;
 
-import static ch.qos.logback.core.CoreConstants.UNBOUND_HISTORY;
-import static ch.qos.logback.core.CoreConstants.UNBOUNDED_TOTAL_SIZE_CAP;
-
-import java.io.File;
-import java.util.Date;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
 import ch.qos.logback.core.CoreConstants;
 import ch.qos.logback.core.rolling.helper.ArchiveRemover;
 import ch.qos.logback.core.rolling.helper.CompressionMode;
 import ch.qos.logback.core.rolling.helper.Compressor;
 import ch.qos.logback.core.rolling.helper.FileFilterUtil;
 import ch.qos.logback.core.rolling.helper.FileNamePattern;
-import ch.qos.logback.core.rolling.helper.RenameUtil;
 import ch.qos.logback.core.util.FileSize;
+
+import java.io.File;
+import java.util.Date;
+import java.util.concurrent.Future;
+
+import static ch.qos.logback.core.CoreConstants.UNBOUNDED_TOTAL_SIZE_CAP;
+import static ch.qos.logback.core.CoreConstants.UNBOUND_HISTORY;
 
 /**
  * <code>TimeBasedRollingPolicy</code> is both easy to configure and quite
@@ -47,7 +44,6 @@ public class TimeBasedRollingPolicy<E> extends RollingPolicyBase implements Trig
     FileNamePattern fileNamePatternWithoutCompSuffix;
 
     private Compressor compressor;
-    private RenameUtil renameUtil = new RenameUtil();
     Future<?> compressionFuture;
     Future<?> cleanUpFuture;
 
@@ -131,16 +127,9 @@ public class TimeBasedRollingPolicy<E> extends RollingPolicyBase implements Trig
         super.stop();
     }
 
-    private void waitForAsynchronousJobToStop(Future<?> aFuture, String jobDescription) {
-        if (aFuture != null) {
-            try {
-                aFuture.get(CoreConstants.SECONDS_TO_WAIT_FOR_COMPRESSION_JOBS, TimeUnit.SECONDS);
-            } catch (TimeoutException e) {
-                addError("Timeout while waiting for " + jobDescription + " job to finish", e);
-            } catch (Exception e) {
-                addError("Unexpected exception while waiting for " + jobDescription + " job to finish", e);
-            }
-        }
+    @Override
+    protected Compressor getCompressor() {
+        return compressor;
     }
 
     private String transformFileNamePattern2ZipEntry(String fileNamePatternStr) {
@@ -181,13 +170,6 @@ public class TimeBasedRollingPolicy<E> extends RollingPolicyBase implements Trig
             Date now = new Date(timeBasedFileNamingAndTriggeringPolicy.getCurrentTime());
             this.cleanUpFuture = archiveRemover.cleanAsynchronously(now);
         }
-    }
-
-    Future<?> renameRawAndAsyncCompress(String nameOfCompressedFile, String innerEntryName) throws RolloverFailure {
-        String parentsRawFile = getParentsRawFileProperty();
-        String tmpTarget = nameOfCompressedFile + System.nanoTime() + ".tmp";
-        renameUtil.rename(parentsRawFile, tmpTarget);
-        return compressor.asyncCompress(tmpTarget, nameOfCompressedFile, innerEntryName);
     }
 
     /**

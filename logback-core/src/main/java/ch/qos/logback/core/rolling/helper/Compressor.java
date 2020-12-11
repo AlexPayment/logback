@@ -13,6 +13,12 @@
  */
 package ch.qos.logback.core.rolling.helper;
 
+import ch.qos.logback.core.rolling.RolloverFailure;
+import ch.qos.logback.core.spi.ContextAwareBase;
+import ch.qos.logback.core.status.ErrorStatus;
+import ch.qos.logback.core.status.WarnStatus;
+import ch.qos.logback.core.util.FileUtil;
+
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -22,12 +28,6 @@ import java.util.concurrent.Future;
 import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
-import ch.qos.logback.core.rolling.RolloverFailure;
-import ch.qos.logback.core.spi.ContextAwareBase;
-import ch.qos.logback.core.status.ErrorStatus;
-import ch.qos.logback.core.status.WarnStatus;
-import ch.qos.logback.core.util.FileUtil;
 
 /**
  * The <code>Compression</code> class implements ZIP and GZ file
@@ -172,7 +172,7 @@ public class Compressor extends ContextAwareBase {
                 gzos.write(inbuf, 0, n);
             }
 
-            addInfo("Done ZIP compressing [" + file2gz + "] as [" + gzedFile + "]");
+            addInfo("Done GZ compressing [" + file2gz + "] as [" + gzedFile + "]");
         } catch (Exception e) {
             addStatus(new ErrorStatus("Error occurred while compressing [" + nameOfFile2gz + "] into [" + nameOfgzedFile + "].", this, e));
         }
